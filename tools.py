@@ -3,7 +3,7 @@ import yt_dlp
 import warnings
 import logging
 
-from pytube import YouTube, Search
+from pytube import Search
 from typing import List, Dict
 from langchain_core.tools import tool
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -33,8 +33,8 @@ def extract_video_id(url: str) -> str:
         str: Extracted video ID or error message if parsing fails.
     """
 
-    # Regex pattern to match video IDs
-    pattern = r'(?:v=|be/|embed/)([a-zA-Z0-9_-]{11})'
+    # Match common watch, short, embed, and shorts URLs.
+    pattern = r'(?:v=|be/|embed/|shorts/)([a-zA-Z0-9_-]{11})'
     match = re.search(pattern, url)
     return match.group(1) if match else "Error: Invalid YouTube URL"
 
@@ -87,17 +87,20 @@ def search_youtube(query: str) -> List[Dict[str, str]]:
 @tool
 def get_full_metadata(url: str) -> dict:
     """Extract metadata given a YouTube URL, including title, views, duration, channel, likes, comments, and chapters."""
-    with yt_dlp.YoutubeDL({'quiet': True, 'logger': yt_dpl_logger}) as ydl:
-        info = ydl.extract_info(url, download=False)
-        return {
-            'title': info.get('title'),
-            'views': info.get('view_count'),
-            'duration': info.get('duration'),
-            'channel': info.get('uploader'),
-            'likes': info.get('like_count'),
-            'comments': info.get('comment_count'),
-            'chapters': info.get('chapters', [])
-        }
+    try:
+        with yt_dlp.YoutubeDL({'quiet': True, 'logger': yt_dpl_logger}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return {
+                'title': info.get('title'),
+                'views': info.get('view_count'),
+                'duration': info.get('duration'),
+                'channel': info.get('uploader'),
+                'likes': info.get('like_count'),
+                'comments': info.get('comment_count'),
+                'chapters': info.get('chapters', [])
+            }
+    except Exception as e:
+        return {'error': f'Failed to get metadata: {str(e)}'}
 
 @tool
 def get_thumbnails(url: str) -> List[Dict]:
@@ -118,11 +121,13 @@ def get_thumbnails(url: str) -> List[Dict]:
             thumbnails = []
             for t in info.get('thumbnails', []):
                 if 'url' in t:
+                    width = t.get('width')
+                    height = t.get('height')
                     thumbnails.append({
                         "url": t['url'],
-                        "width": t.get('width'),
-                        "height": t.get('height'),
-                        "resolution": f"{t.get('width', '')}x{t.get('height', '')}".strip('x')
+                        "width": width,
+                        "height": height,
+                        "resolution": f"{width}x{height}" if width and height else None
                     })
 
             return thumbnails
